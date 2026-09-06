@@ -97,7 +97,8 @@ def page(url: str = Query(...)):
     try:
         r = requests.get(url, headers=UA, timeout=12)
         r.raise_for_status()
-        h = r.text
+        h = re.sub(r"<script.*?</script>|<style.*?</style>|<svg.*?</svg>|<nav.*?</nav>|<header.*?</header>|<footer.*?</footer>",
+                   " ", r.text, flags=re.S | re.I)
         t = re.search(r"<title[^>]*>(.*?)</title>", h, re.S | re.I)
         title = clean(t.group(1)) if t else url
         paras = re.findall(r"<p[^>]*>(.*?)</p>", h, re.S | re.I)
