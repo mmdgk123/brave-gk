@@ -31,16 +31,22 @@ button:active{transform:scale(.95)}
 <input id="q" placeholder="چی رو سرچ کنم؟" enterkeyhint="search">
 <button onclick="go()">🔍</button>
 </div>
+<button id="sendBtn" style="display:none;width:100%;padding:12px;margin-top:4px" onclick="sendToChat()">📩 نمایش لینک‌ها تو چت (باز شدن داخل تلگرام)</button>
 <div id="res"></div>
 <script>
 const tg = window.Telegram.WebApp; tg.ready(); tg.expand();
 const API = window.location.origin; // همون سرور خود ربات
 let lastResults = [];
+let lastQuery = "";
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function openUrl(i){
   const u = lastResults[i].url;
-  if (tg.openLink) tg.openLink(u);
+  if (tg.openLink) tg.openLink(u, {try_instant_view:true});
   else window.open(u, '_blank');
+}
+function sendToChat(){
+  const items = lastResults.slice(0,5).map(x=>({t:x.title, u:x.url}));
+  tg.sendData(JSON.stringify({q:lastQuery, items}));
 }
 document.getElementById('q').addEventListener('keydown', e=>{ if(e.key==='Enter') go(); });
 async function go(){
@@ -53,6 +59,8 @@ async function go(){
     const d = await r.json();
     if(!d.results || !d.results.length){ box.innerHTML='<div class="loading">نتیجه‌ای پیدا نشد</div>'; return; }
     lastResults = d.results;
+    lastQuery = q;
+    document.getElementById('sendBtn').style.display = 'block';
     box.innerHTML = d.results.map((x,i)=>
       `<div class="card" onclick="openUrl(${i})"><b>${esc(x.title)}</b><small>${esc(x.desc)||''}<br>${esc(x.url)}</small></div>`
     ).join('');

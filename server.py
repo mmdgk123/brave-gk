@@ -117,6 +117,26 @@ def poll():
             for u in r.get("result", []):
                 offset = u["update_id"] + 1
                 msg = u.get("message") or {}
+                wad = msg.get("web_app_data")
+                if wad:
+                    chat = msg["chat"]["id"]
+                    try:
+                        import json
+                        d = json.loads(wad.get("data") or "{}")
+                        items = d.get("items") or []
+                        kb = {"inline_keyboard": [
+                            [{"text": (x.get("t") or "لینک")[:60], "url": x.get("u")}]
+                            for x in items[:5] if x.get("u")]}
+                        if kb["inline_keyboard"]:
+                            tg("sendMessage", {
+                                "chat_id": chat,
+                                "text": f"🔍 نتایج «{(d.get('q') or '')[:50]}» — بزن روشون، تو خود تلگرام باز می‌شن 👇",
+                                "reply_markup": kb})
+                        else:
+                            tg("sendMessage", {"chat_id": chat, "text": "نتیجه‌ای نبود 😕"})
+                    except Exception as e:
+                        print("web_app_data error:", e)
+                    continue
                 if (msg.get("text") or "").startswith("/start"):
                     chat = msg["chat"]["id"]
                     if PUBLIC_URL.startswith("https://"):
