@@ -13,23 +13,54 @@ PUBLIC_URL = os.getenv("PUBLIC_URL", "")
 app = FastAPI()
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-@app.get("/api/search")
-def search(q: str = Query(...)):
+def clean(t):
+    return ihtml.unescape(re.sub(r"<.*?>", "", t)).strip()
+
+def ddg_html(q):
     r = requests.post("https://html.duckduckgo.com/html/",
                       data={"q": q}, headers=UA, timeout=15)
+    r.raise_for_status()
     out = []
     for m in re.finditer(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>(.*?)class="result__snippet"[^>]*>(.*?)</',
                          r.text, re.S):
         url, title, _, desc = m.groups()
-        title = ihtml.unescape(re.sub(r"<.*?>", "", title)).strip()
-        desc = ihtml.unescape(re.sub(r"<.*?>", "", desc)).strip()
         um = re.search(r"uddg=([^&]+)", url)
         if um:
             url = unquote(um.group(1))
-        out.append({"title": title, "url": url, "desc": desc})
+        out.append({"title": clean(title), "url": url, "desc": clean(desc)})
         if len(out) >= 10:
             break
-    return {"results": out}
+    return out
+
+def ddg_lite(q):
+    r = requests.post("https://lite.duckduckgo.com/lite/",
+                      data={"q": q}, headers=UA, timeout=15)
+    r.raise_for_status()
+    links = re.findall(r"<a rel=\"nofollow\" href=\"(https?://[^\"]+)\" class='result-link'>(.*?)</a>",
+                       r.text, re.S)
+    snips = re.findall(r"class='result-snippet'>(.*?)</td>", r.text, re.S)
+    out = []
+    for i, (url, title) in enumerate(links):
+        if "duckduckgo.com" in url:
+            continue
+        out.append({"title": clean(title), "url": url,
+                    "desc": clean(snips[i]) if i < len(snips) else ""})
+        if len(out) >= 10:
+            break
+    return out
+
+@app.get("/api/search")
+def search(q: str = Query(...)):
+    for name, fn in (("html", ddg_html), ("lite", ddg_lite)):
+        try:
+            res = fn(q)
+            if res:
+                print(f"search ok via {name}: {len(res)}")
+                return {"results": res}
+            print(f"search empty via {name}")
+        except Exception as e:
+            print(f"search {name} failed:", repr(e)[:200])
+    return {"results": []}
 
 @app.get("/")
 def root():
