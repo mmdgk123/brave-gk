@@ -60,6 +60,7 @@ def bing(q):
         if not m:
             continue
         url, title = m.groups()
+        url = ihtml.unescape(url)
         um = re.search(r"[?&]u=a1([A-Za-z0-9%+/=_-]+)", url)
         if um:
             try:
