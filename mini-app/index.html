@@ -17,7 +17,8 @@ input:focus{border-color:#fb542b}
 button{background:#fb542b;color:#fff;border:none;border-radius:14px;padding:0 22px;font-size:16px;font-weight:700;cursor:pointer}
 button:active{transform:scale(.95)}
 #res{margin-top:12px;display:flex;flex-direction:column;gap:10px}
-.card{background:var(--tg-theme-secondary-bg-color,#222);border-radius:14px;padding:12px 14px;text-decoration:none;color:inherit;display:block}
+.card{background:var(--tg-theme-secondary-bg-color,#222);border-radius:14px;padding:12px 14px;text-decoration:none;color:inherit;display:block;cursor:pointer}
+.card:active{transform:scale(.98)}
 .card b{color:#7aa2ff;font-size:15px;display:block;margin-bottom:4px}
 .card small{opacity:.65;font-size:12px;display:block;line-height:1.9}
 .loading{text-align:center;opacity:.6;margin-top:20px}
@@ -34,6 +35,13 @@ button:active{transform:scale(.95)}
 <script>
 const tg = window.Telegram.WebApp; tg.ready(); tg.expand();
 const API = window.location.origin; // همون سرور خود ربات
+let lastResults = [];
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function openUrl(i){
+  const u = lastResults[i].url;
+  if (tg.openLink) tg.openLink(u);
+  else window.open(u, '_blank');
+}
 document.getElementById('q').addEventListener('keydown', e=>{ if(e.key==='Enter') go(); });
 async function go(){
   const q = document.getElementById('q').value.trim();
@@ -44,8 +52,9 @@ async function go(){
     const r = await fetch(API + '/api/search?q=' + encodeURIComponent(q));
     const d = await r.json();
     if(!d.results || !d.results.length){ box.innerHTML='<div class="loading">نتیجه‌ای پیدا نشد</div>'; return; }
-    box.innerHTML = d.results.map(x=>
-      `<a class="card" href="${x.url}" target="_blank"><b>${x.title}</b><small>${x.desc||''}<br>${x.url}</small></a>`
+    lastResults = d.results;
+    box.innerHTML = d.results.map((x,i)=>
+      `<div class="card" onclick="openUrl(${i})"><b>${esc(x.title)}</b><small>${esc(x.desc)||''}<br>${esc(x.url)}</small></div>`
     ).join('');
   }catch(e){ box.innerHTML='<div class="loading">خطا در اتصال به سرور</div>'; }
 }
