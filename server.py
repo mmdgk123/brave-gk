@@ -40,16 +40,28 @@ async def setup_bot():
     """دکمه باز کردن وب‌اپ رو روی /start می‌ذاره"""
     from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
     from telegram.ext import Application, CommandHandler
-    app_tg = Application.builder().token(BOT_TOKEN).build()
+
+    async def post_init(app_tg):
+        if not PUBLIC_URL.startswith("https://"):
+            print("skip menu button, PUBLIC_URL invalid:", PUBLIC_URL)
+            return
+        try:
+            await app_tg.bot.set_chat_menu_button(
+                menu_button={"type": "web_app", "text": "🔍 جستجو", "web_app": {"url": PUBLIC_URL}})
+            print("menu button set")
+        except Exception as e:
+            print("menu button failed:", e)
+
+    app_tg = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
     async def start(update: Update, ctx):
-        kb = [[InlineKeyboardButton("🦁 باز کردن مرورگر", web_app=WebAppInfo(url=PUBLIC_URL))]]
-        await update.message.reply_text("دکمه زیر رو بزن تا مرورگر داخل تلگرام باز شه 👇",
-                                        reply_markup=InlineKeyboardMarkup(kb))
+        if PUBLIC_URL.startswith("https://"):
+            kb = [[InlineKeyboardButton("🦁 باز کردن مرورگر", web_app=WebAppInfo(url=PUBLIC_URL))]]
+            await update.message.reply_text("دکمه زیر رو بزن تا مرورگر داخل تلگرام باز شه 👇",
+                                            reply_markup=InlineKeyboardMarkup(kb))
+        else:
+            await update.message.reply_text("ربات هنوز آماده نشده، یکم دیگه امتحان کن ⏳")
     app_tg.add_handler(CommandHandler("start", start))
-    # منوی دکمه‌ای پایین (Menu Button) هم وب‌اپ می‌شه:
-    await app_tg.bot.set_chat_menu_button(
-        menu_button={"type": "web_app", "text": "🔍 جستجو", "web_app": {"url": PUBLIC_URL}})
     await app_tg.run_polling()
 
 if __name__ == "__main__":
