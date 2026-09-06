@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: brave-gk-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: PUBLIC_URL
+        sync: false
