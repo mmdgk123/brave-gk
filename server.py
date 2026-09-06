@@ -91,6 +91,27 @@ def search(q: str = Query(...)):
             print(f"search {name} failed:", repr(e)[:200])
     return {"results": []}
 
+@app.get("/api/page")
+def page(url: str = Query(...)):
+    """متن صفحه رو استخراج می‌کنه برای نمایش داخل ربات"""
+    try:
+        r = requests.get(url, headers=UA, timeout=12)
+        r.raise_for_status()
+        h = r.text
+        t = re.search(r"<title[^>]*>(.*?)</title>", h, re.S | re.I)
+        title = clean(t.group(1)) if t else url
+        paras = re.findall(r"<p[^>]*>(.*?)</p>", h, re.S | re.I)
+        txt = "\n\n".join(clean(p) for p in paras)
+        txt = re.sub(r"\n{3,}", "\n\n", txt).strip()[:8000]
+        if len(txt) < 200:
+            body = re.sub(r"<script.*?</script>|<style.*?</style>|<nav.*?</nav>|<footer.*?</footer>",
+                          " ", h, flags=re.S | re.I)
+            txt = re.sub(r"\s+", " ", clean(body)).strip()[:8000]
+        return {"title": title, "text": txt or "متن قابل نمایش نیست — دکمه 🌐 رو بزن"}
+    except Exception as e:
+        print("page failed:", repr(e)[:200])
+        return {"title": url, "text": "باز نشد — دکمه 🌐 رو بزن"}
+
 @app.get("/")
 def root():
     return FileResponse("mini-app/index.html")
