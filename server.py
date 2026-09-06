@@ -49,9 +49,37 @@ def ddg_lite(q):
             break
     return out
 
+def bing(q):
+    import base64
+    r = requests.get("https://www.bing.com/search", params={"q": q},
+                     headers={**UA, "Accept-Language": "fa,en;q=0.9"}, timeout=15)
+    r.raise_for_status()
+    out = []
+    for b in re.findall(r'<li class="b_algo".*?</li>', r.text, re.S):
+        m = re.search(r'<h2.*?<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', b, re.S)
+        if not m:
+            continue
+        url, title = m.groups()
+        um = re.search(r"[?&]u=a1([A-Za-z0-9%+/=_-]+)", url)
+        if um:
+            try:
+                s = um.group(1)
+                s += "=" * (-len(s) % 4)
+                url = base64.b64decode(s).decode("utf-8", "replace")
+            except Exception:
+                continue
+        if not url.startswith("http") or "bing.com" in url or "microsoft.com" in url:
+            continue
+        p = re.search(r'<div class="b_caption"><p[^>]*>(.*?)</p>', b, re.S)
+        out.append({"title": clean(title), "url": url,
+                    "desc": clean(p.group(1)) if p else ""})
+        if len(out) >= 10:
+            break
+    return out
+
 @app.get("/api/search")
 def search(q: str = Query(...)):
-    for name, fn in (("html", ddg_html), ("lite", ddg_lite)):
+    for name, fn in (("html", ddg_html), ("lite", ddg_lite), ("bing", bing)):
         try:
             res = fn(q)
             if res:
