@@ -1,8 +1,9 @@
 """Telegram search mini-app backend (DuckDuckGo - free, no API key).
-Run: pip install fastapi uvicorn requests python-telegram-bot && python server.py
+Run: pip install -r requirements.txt && python server.py
 Env: BOT_TOKEN=xxx  PUBLIC_URL=https://xxx.onrender.com
 """
-import os, re, html as ihtml, requests
+import os, re, time, threading, html as ihtml, requests
+from urllib.parse import unquote
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse
 
@@ -22,10 +23,8 @@ def search(q: str = Query(...)):
         url, title, _, desc = m.groups()
         title = ihtml.unescape(re.sub(r"<.*?>", "", title)).strip()
         desc = ihtml.unescape(re.sub(r"<.*?>", "", desc)).strip()
-        # DDG wraps links as //duckduckgo.com/l/?uddg=<real>
         um = re.search(r"uddg=([^&]+)", url)
         if um:
-            from urllib.parse import unquote
             url = unquote(um.group(1))
         out.append({"title": title, "url": url, "desc": desc})
         if len(out) >= 10:
@@ -36,36 +35,53 @@ def search(q: str = Query(...)):
 def root():
     return FileResponse("mini-app/index.html")
 
-async def setup_bot():
-    """دکمه باز کردن وب‌اپ رو روی /start می‌ذاره"""
-    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-    from telegram.ext import Application, CommandHandler
+def tg(method, payload=None):
+    try:
+        r = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/{method}",
+                          json=payload or {}, timeout=20)
+        return r.json()
+    except Exception as e:
+        print("tg error:", e)
+        return {}
 
-    async def post_init(app_tg):
-        if not PUBLIC_URL.startswith("https://"):
-            print("skip menu button, PUBLIC_URL invalid:", PUBLIC_URL)
-            return
+def poll():
+    """Long-polling ساده بدون کتابخونه اضافه"""
+    if not BOT_TOKEN:
+        print("no BOT_TOKEN, polling off")
+        return
+    offset = 0
+    while True:
         try:
-            await app_tg.bot.set_chat_menu_button(
-                menu_button={"type": "web_app", "text": "🔍 جستجو", "web_app": {"url": PUBLIC_URL}})
-            print("menu button set")
+            r = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates",
+                             params={"timeout": 30, "offset": offset}, timeout=40).json()
+            for u in r.get("result", []):
+                offset = u["update_id"] + 1
+                msg = u.get("message") or {}
+                if (msg.get("text") or "").startswith("/start"):
+                    chat = msg["chat"]["id"]
+                    if PUBLIC_URL.startswith("https://"):
+                        tg("sendMessage", {
+                            "chat_id": chat,
+                            "text": "دکمه زیر رو بزن تا مرورگر داخل تلگرام باز شه 👇",
+                            "reply_markup": {"inline_keyboard": [
+                                [{"text": "🦁 باز کردن مرورگر", "web_app": {"url": PUBLIC_URL}}]]}})
+                    else:
+                        tg("sendMessage", {"chat_id": chat,
+                                           "text": "ربات هنوز آماده نشده، یکم دیگه امتحان کن ⏳"})
         except Exception as e:
-            print("menu button failed:", e)
+            print("poll error:", e)
+            time.sleep(5)
 
-    app_tg = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
-
-    async def start(update: Update, ctx):
-        if PUBLIC_URL.startswith("https://"):
-            kb = [[InlineKeyboardButton("🦁 باز کردن مرورگر", web_app=WebAppInfo(url=PUBLIC_URL))]]
-            await update.message.reply_text("دکمه زیر رو بزن تا مرورگر داخل تلگرام باز شه 👇",
-                                            reply_markup=InlineKeyboardMarkup(kb))
-        else:
-            await update.message.reply_text("ربات هنوز آماده نشده، یکم دیگه امتحان کن ⏳")
-    app_tg.add_handler(CommandHandler("start", start))
-    await app_tg.run_polling()
+@app.on_event("startup")
+def init():
+    if PUBLIC_URL.startswith("https://"):
+        print("menu:", tg("setChatMenuButton", {
+            "menu_button": {"type": "web_app", "text": "🔍 جستجو",
+                            "web_app": {"url": PUBLIC_URL}}}))
+    else:
+        print("skip menu button, PUBLIC_URL:", PUBLIC_URL)
+    threading.Thread(target=poll, daemon=True).start()
 
 if __name__ == "__main__":
-    import threading, uvicorn
-    threading.Thread(target=lambda: uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000"))), daemon=True).start()
-    import asyncio
-    asyncio.run(setup_bot())
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
